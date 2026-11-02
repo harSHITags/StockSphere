@@ -20,26 +20,6 @@ from app.routers.ai import router as ai_router
 from app.routers.auth import router as auth_router
 
 
-load_dotenv()
-
-JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
-JWT_ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
-security = HTTPBearer(auto_error=False)
-
-if not JWT_SECRET_KEY:
-    raise ValueError("JWT_SECRET_KEY is missing from .env")
-
-
-password_hash = PasswordHash.recommended()
-
-load_dotenv()
-
-client = genai.Client(
-    api_key=os.getenv("GEMINI_API_KEY")
-)
-
-
 app=FastAPI()
 app.include_router(products_router)
 app.include_router(ai_router)
