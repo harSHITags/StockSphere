@@ -70,3 +70,60 @@ class OrderItem(Base):
     unit_price = Column(Float, nullable=False)
     order = relationship("Order", back_populates="items")
     product = relationship("Product", back_populates="order_items")
+
+
+
+class Purchase(Base):
+    __tablename__ = "purchases"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    supplier_name = Column(String, nullable=False)
+
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=False
+    )
+
+    created_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now()
+    )
+
+    user = relationship("User", back_populates="purchases")
+
+    items = relationship(
+        "PurchaseItem",
+        back_populates="purchase"
+    )
+
+
+class PurchaseItem(Base):
+    __tablename__ = "purchase_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    purchase_id = Column(
+        Integer,
+        ForeignKey("purchases.id"),
+        nullable=False
+    )
+
+    product_id = Column(
+        Integer,
+        ForeignKey("product.id"),
+        nullable=False
+    )
+
+    quantity = Column(Integer, nullable=False)
+
+    unit_cost = Column(Float, nullable=False)
+
+
+    user = relationship("User", back_populates="purchases")
+
+    items = relationship(
+        "PurchaseItem",
+        back_populates="purchase"
+    )

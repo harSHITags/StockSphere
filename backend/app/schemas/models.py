@@ -1,4 +1,4 @@
-from pydantic import BaseModel,EmailStr
+from pydantic import BaseModel,EmailStr,Field
 from typing import List
 
 
@@ -30,7 +30,7 @@ class InventoryAdviceRequest(BaseModel):
 
 class OrderItemCreate(BaseModel):
     product_id: int
-    quantity: int
+    quantity: int = Field(gt=0)
 
 
 class OrderCreate(BaseModel):
