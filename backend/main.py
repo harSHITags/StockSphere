@@ -12,10 +12,11 @@ import jwt
 from dotenv import load_dotenv
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jwt.exceptions import InvalidTokenError
-from sqlalchemy import func
 from google import genai
 from app.routers.products import router as products_router
 import time
+from app.dependencies import get_db, get_current_user, get_current_admin
+from app.routers.ai import router as ai_router
 
 
 load_dotenv()
@@ -39,8 +40,8 @@ client = genai.Client(
 
 
 app=FastAPI()
-
 app.include_router(products_router)
+app.include_router(ai_router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -66,12 +67,6 @@ products=[
 ]
 
 
-def get_db():
-     db=SessionLocal()
-     try:
-         yield db
-     finally:
-         db.close()
 
 def init_db():
       db=SessionLocal()
@@ -196,329 +191,13 @@ def login_user(
         "token_type": "bearer"
         }
 
-#current User
-def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: Session = Depends(get_db)
-):
-    # Reject requests without a token
-    if credentials is None:
-        raise HTTPException(
-            status_code=401,
-            detail="Not authenticated",
-            headers={"WWW-Authenticate": "Bearer"}
-        )
-
-    token = credentials.credentials
-
-    try:
-        # Verify the token's signature and expiry
-        payload = jwt.decode(
-            token,
-            JWT_SECRET_KEY,
-            algorithms=[JWT_ALGORITHM]
-        )
-
-        username = payload.get("sub")
-
-        if not username:
-            raise HTTPException(
-                status_code=401,
-                detail="Invalid token"
-            )
-
-    except InvalidTokenError:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid or expired token",
-            headers={"WWW-Authenticate": "Bearer"}
-        )
-
-    #  Find the user associated with the token
-    current_user = db.query(databaseModels.User).filter(
-        databaseModels.User.username == username
-    ).first()
-
-    if current_user is None:
-        raise HTTPException(
-            status_code=401,
-            detail="User not found"
-        )
-
-    return current_user
-
-#current admin
-def get_current_admin(
-    current_user: databaseModels.User = Depends(get_current_user)
-):
-    if current_user.role != "admin":
-        raise HTTPException(
-            status_code=403,
-            detail="Admin access required"
-        )
-
-    return current_user
-
-#GEMINI DESC
-
-@app.post("/products/generate-description")
-def generate_product_description(
-    request: DescriptionRequest,
-    current_user: databaseModels.User = Depends(get_current_user)
-):
-    prompt = f"""
-    Write a clear, professional product description for an inventory
-    management application.
-
-    Product name: {request.name}
-    Category: {request.category}
-
-    Requirements:
-    - Keep it between 40 and 70 words.
-    - Describe the product naturally.
-    - Do not invent specifications or features not provided.
-    - Return only the description.
-    """
-
-    try:
-        response = client.models.generate_content(
-            model="gemini-3.8-flash",
-            contents=prompt
-        )
-
-        if not response.text:
-            raise HTTPException(
-                status_code=502,
-                detail="AI returned an empty description."
-            )
-
-        return {"description": response.text.strip()}
-
-    except HTTPException:
-        raise
-
-    except Exception as e:
-       print("Gemini API error:", repr(e))
-    raise HTTPException(
-        status_code=502,
-        detail="Unable to generate a description. Check backend logs."
-      )
-
-#inventory endpoint
-
-@app.post("/products/inventory-advice")
-def get_inventory_advice(
-    request: InventoryAdviceRequest,
-    db: Session = Depends(get_db),
-    current_user: databaseModels.User = Depends(get_current_user)
-):
-    # 1. Fetch only the logged-in user's products
-    products = (
-        db.query(databaseModels.Product)
-        .filter(
-            databaseModels.Product.user_id == current_user.id
-        )
-        .all()
-    )
-
-    # 2. Prepare a summary for Gemini
-    inventory = []
-
-    for product in products:
-        quantity = int(product.quantity)
-
-        if quantity == 0:
-            status = "Out of stock"
-        elif quantity <= request.low_stock_threshold:
-            status = "Low stock"
-        else:
-            status = "Healthy"
-
-        inventory.append({
-            "name": product.name,
-            "quantity": quantity,
-            "price": float(product.price),
-            "status": status
-        })
-
-    # 3. Ask Gemini to analyse the inventory
-    prompt = f"""
-    You are an inventory management advisor.
-
-    Analyse the following inventory data:
-    {inventory}
-
-    Provide:
-    1. A short overall inventory summary.
-    2. Products that need attention and why.
-    3. Practical recommendations for the user.
-
-    Only use the supplied data.
-    Do not invent sales history, demand forecasts,
-    supplier information, or missing product details.
-    If there are no products, explain that the inventory is empty.
-
-    Return a clear, concise answer with headings.
-    """
-    try:
-        response = client.models.generate_content(
-            model="gemini-3.8-flash",
-            contents=prompt
-        )
-
-        advice = (response.text or "").strip()
-
-        if not advice:
-            raise HTTPException(
-                status_code=502,
-                detail="Gemini returned an empty response."
-            )
-
-        return {
-            "inventory": inventory,
-            "advice": advice
-        }
-
-    except HTTPException:
-        raise
-
-    except Exception as e:
-        print("Gemini inventory advice error:", repr(e))
-        raise HTTPException(
-            status_code=503,
-            detail="AI service is temporarily unavailable. Please try again."
-        )
-    
-
-# Products EndPoints
-@app.get("/products")
-def get_all_products(
-    db: Session = Depends(get_db),
-    current_user: databaseModels.User = Depends(get_current_user)
-):
-    db_products = (
-        db.query(databaseModels.Product)
-        .filter(databaseModels.Product.user_id == current_user.id)
-        .all()
-    )
-
-    return db_products
-
-
-@app.get("/products/{id}")
-def get_product_by_id(
-    id: int,
-    db: Session = Depends(get_db),
-    current_user: databaseModels.User = Depends(get_current_user)
-):
-    db_product = (
-        db.query(databaseModels.Product)
-        .filter(
-            databaseModels.Product.id == id,
-            databaseModels.Product.user_id == current_user.id
-        )
-        .first()
-    )
-
-    if db_product is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Product not found"
-        )
-
-    return db_product
-
-
-@app.post("/products")
-def add_product(
-    product: Product,
-    db: Session = Depends(get_db),
-    current_user: databaseModels.User = Depends(get_current_user)
-):
-    # Step 1: Find this user's highest product number
-    last_number = db.query(
-        func.max(databaseModels.Product.user_product_number)
-    ).filter(
-        databaseModels.Product.user_id == current_user.id
-    ).scalar()
-
-    # Step 2: Generate the next number for this user
-    next_number = (last_number or 0) + 1
-
-    # Step 3: Create the product
-    new_product = databaseModels.Product(
-        name=product.name,
-        description=product.description,
-        price=product.price,
-        quantity=product.quantity,
-        user_id=current_user.id,
-        user_product_number=next_number
-    )
-
-    # Step 4: Save it to the database
-    db.add(new_product)
-    db.commit()
-    db.refresh(new_product)
-
-    return new_product
-
-
-@app.put("/products/{id}")
-def update_products(
-    id: int,
-    product: Product,
-    db: Session = Depends(get_db),
-    current_user: databaseModels.User = Depends(get_current_user)
-):
-    db_product = (
-        db.query(databaseModels.Product)
-        .filter(
-            databaseModels.Product.id == id,
-            databaseModels.Product.user_id == current_user.id
-        )
-        .first()
-    )
-
-    if db_product is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Product not found"
-        )
-
-    db_product.name = product.name
-    db_product.description = product.description
-    db_product.price = product.price
-    db_product.quantity = product.quantity
-
-    db.commit()
-    db.refresh(db_product)
-
-    return db_product
 
 
 
-@app.delete("/products/{id}")
-def delete_products(
-    id: int,
-    db: Session = Depends(get_db),
-    current_user: databaseModels.User = Depends(get_current_admin)
-):
-    db_product = (
-        db.query(databaseModels.Product)
-        .filter(
-            databaseModels.Product.id == id,
-            databaseModels.Product.user_id == current_user.id
-        )
-        .first()
-    )
 
-    if db_product is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Product not found"
-        )
 
-    db.delete(db_product)
-    db.commit()
 
-    return {"message": "Product successfully removed"}
+
+
+
+
