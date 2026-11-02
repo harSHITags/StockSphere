@@ -4,22 +4,15 @@ from app.database import databaseModels
 from app.schemas.models import DescriptionRequest, InventoryAdviceRequest
 from sqlalchemy.orm import Session
 from google import genai
-import os
-from dotenv import load_dotenv
-
-load_dotenv()
-
+from app.core.config import GEMINI_API_KEY
 
 router = APIRouter(
     prefix="/products",
     tags=["AI Services"]
 )
 
-
-
-
 client = genai.Client(
-    api_key=os.getenv("GEMINI_API_KEY")
+    api_key=GEMINI_API_KEY
 )
 
 
