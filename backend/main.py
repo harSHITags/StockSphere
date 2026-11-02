@@ -3,8 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from app.database.database import SessionLocal,engine
 from sqlalchemy.orm import Session
-from models import Product,UserCreate,LoginRequest,DescriptionRequest,InventoryAdviceRequest
-import databaseModels as databaseModels
+from app.schemas.models import Product,UserCreate,LoginRequest,DescriptionRequest,InventoryAdviceRequest
+import app.database.databaseModels as databaseModels
 from pwdlib import PasswordHash
 import os
 from datetime import datetime, timedelta, timezone
@@ -14,6 +14,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jwt.exceptions import InvalidTokenError
 from sqlalchemy import func
 from google import genai
+from app.routers.products import router as products_router
 import time
 
 
@@ -39,6 +40,8 @@ client = genai.Client(
 
 app=FastAPI()
 
+app.include_router(products_router)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],
@@ -51,12 +54,6 @@ print("STEP 1: Creating tables...")
 databaseModels.Base.metadata.create_all(bind=engine)
 print("STEP 2: Tables created")
 
-class Product(BaseModel):
-     id:int
-     name:str
-     description:str
-     price:int
-     quantity:int
 
 
 products=[
