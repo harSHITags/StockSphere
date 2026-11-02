@@ -1,6 +1,7 @@
 
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Column,Integer,String,Float,ForeignKey,DateTime,func
+from sqlalchemy.orm import relationship
 
 Base=declarative_base()
 
@@ -13,6 +14,8 @@ class User(Base):
     email = Column(String, unique=True, nullable=False)
     hashed_password = Column(String, nullable=False)
     role = Column(String, default="user", nullable=False)
+    products = relationship("Product", back_populates="user")
+    orders = relationship("Order", back_populates="user")
 
 class Product(Base):
 
@@ -25,6 +28,8 @@ class Product(Base):
     quantity=Column(Integer)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     user_product_number = Column(Integer, nullable=True)
+    user = relationship("User", back_populates="products")
+    order_items = relationship("OrderItem", back_populates="product")
 
 
 class Order(Base):
@@ -39,6 +44,8 @@ class Order(Base):
     status = Column(String, default="completed", nullable=False)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    user = relationship("User", back_populates="orders")
+    items = relationship("OrderItem", back_populates="order")
 
 
 class OrderItem(Base):
@@ -61,3 +68,5 @@ class OrderItem(Base):
     quantity = Column(Integer, nullable=False)
 
     unit_price = Column(Float, nullable=False)
+    order = relationship("Order", back_populates="items")
+    product = relationship("Product", back_populates="order_items")
