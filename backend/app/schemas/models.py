@@ -36,3 +36,14 @@ class OrderItemCreate(BaseModel):
 class OrderCreate(BaseModel):
     customer_name: str
     items: List[OrderItemCreate]
+
+
+class PurchaseItemCreate(BaseModel):
+    product_id: int
+    quantity: int = Field(gt=0)
+    unit_cost: float = Field(gt=0)
+
+
+class PurchaseCreate(BaseModel):
+    supplier_name: str
+    items: List[PurchaseItemCreate]
