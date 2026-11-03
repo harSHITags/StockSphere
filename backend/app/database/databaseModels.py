@@ -16,6 +16,10 @@ class User(Base):
     role = Column(String, default="user", nullable=False)
     products = relationship("Product", back_populates="user")
     orders = relationship("Order", back_populates="user")
+    purchases = relationship(
+    "Purchase",
+    back_populates="user"
+)
 
 class Product(Base):
 
@@ -30,6 +34,7 @@ class Product(Base):
     user_product_number = Column(Integer, nullable=True)
     user = relationship("User", back_populates="products")
     order_items = relationship("OrderItem", back_populates="product")
+    purchase_items = relationship("PurchaseItem", back_populates="product")
 
 
 class Order(Base):
@@ -70,7 +75,6 @@ class OrderItem(Base):
     unit_price = Column(Float, nullable=False)
     order = relationship("Order", back_populates="items")
     product = relationship("Product", back_populates="order_items")
-
 
 
 class Purchase(Base):
@@ -120,10 +124,12 @@ class PurchaseItem(Base):
 
     unit_cost = Column(Float, nullable=False)
 
+    purchase = relationship(
+        "Purchase",
+        back_populates="items"
+    )
 
-    user = relationship("User", back_populates="purchases")
-
-    items = relationship(
-        "PurchaseItem",
-        back_populates="purchase"
+    product = relationship(
+        "Product",
+        back_populates="purchase_items"
     )

@@ -81,10 +81,10 @@ def create_purchase(
             "total_cost": round(total_cost, 2)
         }
 
-  except Exception as e:
-    db.rollback()
-    print("Purchase error:", str(e))
+    except Exception as e:
+     db.rollback()
+     print("Purchase error:", str(e))
     raise HTTPException(
         status_code=500,
         detail="Unable to record purchase"
-    )
+    ) 

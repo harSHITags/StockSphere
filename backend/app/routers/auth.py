@@ -99,6 +99,7 @@ def login_user(
     user: LoginRequest,
     db: Session = Depends(get_db)
 ):
+    print("🔥 LOGIN FUNCTION EXECUTED", flush=True)
     # Find the user by username
     existing_user = db.query(databaseModels.User).filter(
         databaseModels.User.username == user.username
